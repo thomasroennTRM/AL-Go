@@ -1,3 +1,7 @@
+### New `CheckDowngrade` action
+
+The new `CheckDowngrade` action can fail a workflow when an app artifact has a lower version than the corresponding app installed in a Business Central environment. The check is opt-in through the `failOnAppVersionDowngrade` input.
+
 ### New `doNotPerformUpgrade` setting
 
 AL-Go now supports a new `doNotPerformUpgrade` setting that is passed through to `Run-AlPipeline`. Use it to skip the upgrade phase while still running the rest of the pipeline.

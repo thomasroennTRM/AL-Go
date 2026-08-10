@@ -356,6 +356,78 @@ jobs:
           gitHubSecrets: ${{ toJson(secrets) }}
           getSecrets: '${{ steps.envName.outputs.envName }}-AuthContext,${{ steps.envName.outputs.envName }}_AuthContext,AuthContext'
 
+      - name: Determine Downgrade Policy
+        id: DowngradePolicy
+        run: |
+          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+
+          function Parse-JsonObject([string] $jsonText) {
+            if ([string]::IsNullOrWhiteSpace($jsonText)) {
+              return $null
+            }
+            try {
+              return $jsonText | ConvertFrom-Json
+            }
+            catch {
+              Write-Host "::warning::Could not parse settings JSON: $($_.Exception.Message)"
+              return $null
+            }
+          }
+
+          $envName = '${{ steps.envName.outputs.envName }}'
+          $settingsObjects = @()
+
+          if (Test-Path '.github/AL-Go-Settings.json') {
+            $settingsObjects += @((Get-Content -Path '.github/AL-Go-Settings.json' -Raw -Encoding UTF8 | ConvertFrom-Json))
+          }
+
+          $settingsObjects += @(Parse-JsonObject $env:ALGoOrgSettings)
+          $settingsObjects += @(Parse-JsonObject $env:ALGoRepoSettings)
+          $settingsObjects += @(Parse-JsonObject $env:ALGoEnvSettings)
+
+          [nullable[bool]] $globalSetting = $null
+          [nullable[bool]] $environmentSetting = $null
+          $deployToName = "DeployTo$envName"
+
+          foreach ($settings in $settingsObjects) {
+            if ($null -eq $settings) {
+              continue
+            }
+
+            if ($settings.PSObject.Properties.Name -contains 'failOnAppVersionDowngrade') {
+              $globalSetting = [bool]$settings.failOnAppVersionDowngrade
+            }
+
+            if ($settings.PSObject.Properties.Name -contains $deployToName) {
+              $deployTo = $settings.$deployToName
+              if ($null -ne $deployTo -and $deployTo.PSObject.Properties.Name -contains 'failOnAppVersionDowngrade') {
+                $environmentSetting = [bool]$deployTo.failOnAppVersionDowngrade
+              }
+            }
+          }
+
+          $effectiveSetting = $false
+          if ($environmentSetting -ne $null) {
+            $effectiveSetting = [bool]$environmentSetting
+          }
+          elseif ($globalSetting -ne $null) {
+            $effectiveSetting = [bool]$globalSetting
+          }
+
+          Write-Host "Effective failOnAppVersionDowngrade for ${envName}: $effectiveSetting"
+          Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "failOnAppVersionDowngrade=$($effectiveSetting.ToString().ToLowerInvariant())"
+
+      - name: Validate App Versions Before Deploy
+        if: steps.DowngradePolicy.outputs.failOnAppVersionDowngrade == 'true'
+        uses: microsoft/AL-Go-Actions/CheckDowngrade@main
+        env:
+          Secrets: '${{ steps.ReadSecrets.outputs.Secrets }}'
+        with:
+          shell: ${{ matrix.shell }}
+          environmentName: ${{ matrix.environment }}
+          artifactsFolder: '.artifacts'
+          failOnAppVersionDowngrade: 'true'
+
       - name: Deploy to Business Central
         id: Deploy
         uses: microsoft/AL-Go-Actions/Deploy@main
