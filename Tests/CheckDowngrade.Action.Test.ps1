@@ -8,6 +8,7 @@ Describe "CheckDowngrade Action Tests" {
         $scriptRoot = Join-Path $PSScriptRoot "..\Actions\$actionName" -Resolve
         [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'actionScript', Justification = 'False positive.')]
         $actionScript = GetActionScript -scriptRoot $scriptRoot -scriptName "$actionName.ps1"
+        Invoke-Expression $actionScript
 
         function DownloadAndImportBcContainerHelper {}
         function New-BcAuthContext {}
